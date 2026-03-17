@@ -71,15 +71,15 @@ camera.position.z = 6;
 
 // Animation loop
 function animate() {
-  requestAnimationFrame(animate);
+    requestAnimationFrame(animate);
 
-  const meshes = [mesh1, mesh2, mesh3, mesh4, mesh5, mesh6];
-  meshes.forEach(m => {
-    m.rotation.x += 0.01;
-    m.rotation.y += 0.01;
-  });
+    const meshes = [mesh1, mesh2, mesh3, mesh4, mesh5, mesh6];
+    meshes.forEach(m => {
+        m.rotation.x += 0.01;
+        m.rotation.y += 0.01;
+    });
 
-  renderer.render(scene, camera);
+    renderer.render(scene, camera);
 }
 
 animate();
