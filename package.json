@@ -1,4 +1,18 @@
 {
+  "name": "graphic-programming",
+  "private": true,
+  "scripts": {
+    "dev": "vite",
+    "dev:session1": "vite --open /src/session1/index.html",
+    "dev:session2": "vite --open /src/session2/index.html",
+    "dev:session3": "vite --open /src/session3/index.html",
+    "dev:session4": "vite --open /src/session4/index.html",
+    "dev:session5": "vite --open /src/session5/index.html",
+    "dev:session6": "vite --open /src/session6/index.html",
+    "dev:wuwa": "vite --open /src/wuwa-combat/index.html",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
   "dependencies": {
     "three": "^0.183.1"
   },

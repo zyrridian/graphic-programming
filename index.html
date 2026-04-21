@@ -2,14 +2,190 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Graphic Programming</title>
     <style>
+      :root {
+        color-scheme: light;
+        --bg: #ffffff;
+        --panel: #ffffff;
+        --panel-border: #111111;
+        --text: #111111;
+        --muted: #555555;
+        --accent: #111111;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
       body {
+        min-height: 100vh;
         margin: 0;
+        font-family:
+          Inter,
+          system-ui,
+          -apple-system,
+          BlinkMacSystemFont,
+          "Segoe UI",
+          sans-serif;
+        color: var(--text);
+        background: var(--bg);
+      }
+
+      .shell {
+        max-width: 1200px;
+        margin: 0 auto;
+        padding: 40px 20px 48px;
+      }
+
+      .hero {
+        display: grid;
+        gap: 14px;
+        margin-bottom: 28px;
+      }
+
+      .eyebrow {
+        color: var(--accent);
+        text-transform: uppercase;
+        letter-spacing: 0.28em;
+        font-size: 12px;
+      }
+
+      h1 {
+        margin: 0;
+        font-size: clamp(2rem, 4vw, 3.5rem);
+        line-height: 1;
+      }
+
+      .lede {
+        max-width: 760px;
+        margin: 0;
+        color: var(--muted);
+        font-size: 1rem;
+        line-height: 1.6;
+      }
+
+      .grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+        gap: 16px;
+      }
+
+      .card {
+        display: grid;
+        gap: 12px;
+        padding: 18px;
+        min-height: 180px;
+        border: 1px solid var(--panel-border);
+        border-radius: 16px;
+        background: var(--panel);
+        box-shadow: 4px 4px 0 #111111;
+      }
+
+      .card.locked {
+        opacity: 0.9;
+        border-style: dashed;
+      }
+
+      .card.in-progress {
+        border-style: dashed;
+      }
+
+      .card h2 {
+        margin: 0;
+        font-size: 1.2rem;
+      }
+
+      .card p {
+        margin: 0;
+        color: var(--muted);
+        line-height: 1.6;
+      }
+
+      .tags {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+      }
+
+      .tag {
+        display: inline-flex;
+        align-items: center;
+        padding: 6px 10px;
+        border-radius: 999px;
+        font-size: 12px;
+        color: #111111;
+        background: #ffffff;
+        border: 1px solid #111111;
+      }
+
+      .actions {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        margin-top: auto;
+      }
+
+      a {
+        color: inherit;
+        text-decoration: none;
+      }
+
+      .button {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        min-height: 42px;
+        padding: 0 14px;
+        border-radius: 12px;
+        background: #111111;
+        color: #ffffff;
+        font-weight: 700;
+      }
+
+      .button.disabled {
+        background: #ffffff;
+        color: #111111;
+        border: 1px solid #111111;
+        pointer-events: none;
+      }
+
+      .meta {
+        color: var(--muted);
+        font-size: 12px;
+      }
+
+      .footer {
+        margin-top: 20px;
+        color: var(--muted);
+        font-size: 12px;
       }
     </style>
   </head>
   <body>
+    <main class="shell">
+      <section class="hero">
+        <div class="eyebrow">Three.js Practicals</div>
+        <h1>Graphic Programming</h1>
+        <p class="lede">
+          A collection of computer graphics practicals built with Three.js. The
+          project explores core 3D topics such as geometry, materials, lighting,
+          transforms, and camera control through separate session exercises.
+        </p>
+      </section>
+
+      <section
+        class="grid"
+        id="session-grid"
+        aria-label="Session navigation"
+      ></section>
+
+      <p class="footer">
+        Use the individual session pages to study each topic in a focused way.
+      </p>
+    </main>
     <script type="module" src="/main.js"></script>
   </body>
 </html>
