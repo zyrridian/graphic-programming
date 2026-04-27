@@ -43,6 +43,13 @@ const sessions = [
   },
   {
     id: 7,
+    title: "Mid Exam",
+    description: "Midterm examination covering sessions 1-6 concepts.",
+    href: "/src/exam-mid/index.html",
+    tags: ["Review", "Assessment", "Comprehensive"],
+  },
+  {
+    id: 8,
     title: "████ █████",
     description: "██████████ █████████ ████ ███████ ████ ████████.",
     href: null,
@@ -50,7 +57,7 @@ const sessions = [
     locked: true,
   },
   {
-    id: 8,
+    id: 9,
     title: "████ █████",
     description: "████ ██████ ███ ████ █████ ████████ ███ ████ ████████.",
     href: null,

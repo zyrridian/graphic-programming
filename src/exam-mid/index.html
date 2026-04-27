@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Mid Exam</title>
+    <style>
+      body {
+        margin: 0;
+        overflow: hidden; /* Hides scrollbars */
+      }
+      canvas {
+        display: block; /* Removes tiny gap under the canvas */
+      }
+
+      /* Crosshair */
+      #crosshair {
+        position: fixed;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        pointer-events: none;
+        display: none;
+      }
+
+      #crosshair.active {
+        display: block;
+      }
+
+      .crosshair-dot {
+        width: 10px;
+        height: 10px;
+        background: rgba(255, 45, 45, 0.9);
+        border-radius: 50%;
+        border: 1px solid rgba(255, 255, 255, 0.65);
+        box-shadow: 0 0 10px rgba(255, 45, 45, 0.5);
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+      }
+
+      #hud {
+        position: fixed;
+        left: 14px;
+        bottom: 14px;
+        padding: 10px 12px;
+        font-family: "Segoe UI", Tahoma, sans-serif;
+        font-size: 12px;
+        line-height: 1.45;
+        color: #ffffff;
+        background: rgba(0, 0, 0, 0.45);
+        border: 1px solid rgba(255, 255, 255, 0.22);
+        border-radius: 10px;
+        user-select: none;
+      }
+    </style>
+  </head>
+  <body>
+    <!-- Crosshair for FPS view -->
+    <div id="crosshair">
+      <div class="crosshair-dot"></div>
+    </div>
+
+    <div id="hud">
+      Click to lock mouse<br />
+      WASD move | Shift sprint | Ctrl crouch | Space jump | LMB gunfire SFX
+    </div>
+
+    <script type="module" src="./main.js"></script>
+  </body>
+</html>
