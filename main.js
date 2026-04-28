@@ -1,4 +1,16 @@
-const base = import.meta.env.BASE_URL;
+function getBasePath() {
+  const configuredBase = import.meta.env.BASE_URL || "/";
+
+  // In GitHub Pages, this keeps links under /<repo>/ even if build base is not set.
+  if (configuredBase !== "/") {
+    return configuredBase.endsWith("/") ? configuredBase : `${configuredBase}/`;
+  }
+
+  const [firstSegment] = window.location.pathname.split("/").filter(Boolean);
+  return firstSegment ? `/${firstSegment}/` : "/";
+}
+
+const base = getBasePath();
 
 const sessions = [
   {
