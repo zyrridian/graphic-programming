@@ -1,51 +1,53 @@
+const base = import.meta.env.BASE_URL;
+
 const sessions = [
   {
     id: 1,
     title: "Session 1",
     description: "Basic scene setup and a rotating cube.",
-    href: "/src/session1/index.html",
+    href: `${base}src/session1/index.html`,
     tags: ["Scene", "Geometry", "Animation"],
   },
   {
     id: 2,
     title: "Session 2",
     description: "Indexed geometry and wireframe cube construction.",
-    href: "/src/session2/index.html",
+    href: `${base}src/session2/index.html`,
     tags: ["BufferGeometry", "Indices", "Wireframe"],
   },
   {
     id: 3,
     title: "Session 3",
     description: "Textured primitives and material variety.",
-    href: "/src/session3/index.html",
+    href: `${base}src/session3/index.html`,
     tags: ["Textures", "Materials", "Lighting"],
   },
   {
     id: 4,
     title: "Session 4",
     description: "Lighting controls with a small interactive demo.",
-    href: "/src/session4/index.html",
+    href: `${base}src/session4/index.html`,
     tags: ["Lights", "GUI", "Interactivity"],
   },
   {
     id: 5,
     title: "Session 5",
     description: "Transforms, keyboard movement, and GUI-driven controls.",
-    href: "/src/session5/index.html",
+    href: `${base}src/session5/index.html`,
     tags: ["Position", "Rotation", "Scale"],
   },
   {
     id: 6,
     title: "Session 6",
     description: "Camera modes, skybox background, and navigation patterns.",
-    href: "/src/session6/index.html",
+    href: `${base}src/session6/index.html`,
     tags: ["Skybox", "Orbit", "First Person"],
   },
   {
     id: 7,
     title: "Mid Exam",
     description: "Midterm examination covering sessions 1-6 concepts.",
-    href: "/src/exam-mid/index.html",
+    href: `${base}src/exam-mid/index.html`,
     tags: ["Review", "Assessment", "Comprehensive"],
   },
   {
