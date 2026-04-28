@@ -1,3 +1,5 @@
+const base = import.meta.env.BASE_URL;
+
 export const GAME_CONFIG = {
   scene: {
     backgroundColor: 0x87ceeb,
@@ -21,13 +23,13 @@ export const GAME_CONFIG = {
     wallCollisionDistance: 0.45,
   },
   audio: {
-    ambientPath: "./assets/audio/ambient.ogg",
+    ambientPath: `${base}src/exam-mid/assets/audio/ambient.ogg`,
     ambientVolume: 0.2,
     footstepBaseIntervalMs: 280,
     footstepSprintIntervalMs: 180,
     footstepCrouchIntervalMs: 420,
   },
   world: {
-    mapPath: "killhouse.glb",
+    mapPath: `${base}src/exam-mid/killhouse.glb`,
   },
 };
