@@ -30,6 +30,6 @@ export const GAME_CONFIG = {
     footstepCrouchIntervalMs: 420,
   },
   world: {
-    mapPath: `${base}src/exam-mid/map.glb`,
+    mapPath: `${base}src/exam-mid/test.glb`,
   },
 };
