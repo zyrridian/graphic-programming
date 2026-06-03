@@ -10,6 +10,7 @@
     "dev:session5": "vite --open /src/session5/index.html",
     "dev:session6": "vite --open /src/session6/index.html",
     "dev:wuwa": "vite --open /src/wuwa-combat/index.html",
+    "dev:session10": "vite --open /src/session10/index.html",
     "build": "vite build",
     "preview": "vite preview"
   },

@@ -78,31 +78,70 @@ const sessions = [
     tags: ["████████", "████ ███████", "████ █████"],
     locked: true,
   },
+  {
+    id: 10,
+    title: "Session 10",
+    description: "Particle system animations using procedural canvas textures.",
+    href: `${base}src/session10/index.html`,
+    tags: ["Particles", "Textures", "Animation"],
+  },
 ];
 
 const grid = document.querySelector("#session-grid");
 
 if (grid) {
-  grid.innerHTML = sessions
-    .map(
-      (session) => `
-        <article class="card ${session.locked ? "locked" : ""}">
-          <div class="meta">${String(session.id).padStart(2, "0")}</div>
-          <h2>${session.title}</h2>
-          <p>${session.description}</p>
-          <div class="tags">
-            ${session.tags.map((tag) => `<span class="tag">${tag}</span>`).join("")}
-          </div>
-          <div class="actions">
-            <span class="meta">${session.locked ? "██████" : "Open practical"}</span>
-            ${
-              session.locked
-                ? '<span class="button disabled" aria-disabled="true">██████</span>'
-                : `<a class="button" href="${session.href}">Launch</a>`
-            }
-          </div>
-        </article>
-      `,
-    )
-    .join("");
+  grid.replaceChildren(); // clear any existing content
+
+  sessions.forEach((session) => {
+    const article = document.createElement("article");
+    article.className = `card ${session.locked ? "locked" : ""}`;
+
+    const meta = document.createElement("div");
+    meta.className = "meta";
+    meta.textContent = String(session.id).padStart(2, "0");
+    article.appendChild(meta);
+
+    const h2 = document.createElement("h2");
+    h2.textContent = session.title;
+    article.appendChild(h2);
+
+    const p = document.createElement("p");
+    p.textContent = session.description;
+    article.appendChild(p);
+
+    const tagsContainer = document.createElement("div");
+    tagsContainer.className = "tags";
+    session.tags.forEach((tagText) => {
+      const tag = document.createElement("span");
+      tag.className = "tag";
+      tag.textContent = tagText;
+      tagsContainer.appendChild(tag);
+    });
+    article.appendChild(tagsContainer);
+
+    const actions = document.createElement("div");
+    actions.className = "actions";
+
+    const statusMeta = document.createElement("span");
+    statusMeta.className = "meta";
+    statusMeta.textContent = session.locked ? "██████" : "Open practical";
+    actions.appendChild(statusMeta);
+
+    if (session.locked) {
+      const btn = document.createElement("span");
+      btn.className = "button disabled";
+      btn.setAttribute("aria-disabled", "true");
+      btn.textContent = "██████";
+      actions.appendChild(btn);
+    } else {
+      const btn = document.createElement("a");
+      btn.className = "button";
+      btn.href = session.href;
+      btn.textContent = "Launch";
+      actions.appendChild(btn);
+    }
+
+    article.appendChild(actions);
+    grid.appendChild(article);
+  });
 }

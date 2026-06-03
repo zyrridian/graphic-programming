@@ -1,5 +1,10 @@
 # Graphic Programming
 
+## Installation
+
+- run `npm run install`
+- `npm run dev`
+
 ## Mid Exam Audio Credits
 
 Audio files used in the mid exam scene are stored in `src/exam-mid/assets/audio`.
