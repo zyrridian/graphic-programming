@@ -11,6 +11,9 @@ import * as THREE from 'three'
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js'
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import * as SkeletonUtils from 'three/addons/utils/SkeletonUtils.js';
+import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
+import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
+import { GlitchPass } from 'three/addons/postprocessing/GlitchPass.js';
 import GUI from 'lil-gui';
 import * as CANNON from 'cannon-es';
 import { MapManager } from './mapManager';
@@ -60,12 +63,27 @@ camera.position.x = -2.54;
 camera.position.y = 1.58;
 camera.position.z = 6.34;
 
+// CSS SCREEN FLASH
+const screenFlash = document.createElement('div');
+screenFlash.style.position = 'absolute';
+screenFlash.style.top = '0';
+screenFlash.style.left = '0';
+screenFlash.style.width = '100vw';
+screenFlash.style.height = '100vh';
+screenFlash.style.backgroundColor = 'black'; // Dark teleport vibe
+screenFlash.style.opacity = '0';
+screenFlash.style.pointerEvents = 'none';
+screenFlash.style.transition = 'opacity 0.28s ease-out';
+screenFlash.style.zIndex = '9999';
+document.body.appendChild(screenFlash);
+
 // AUDIO (Requirement Immersion)
 const listener = new THREE.AudioListener();
 camera.add(listener);
 
 const bgmSound = new THREE.Audio(listener);
 const punchSound = new THREE.Audio(listener);
+const teleportSound = new THREE.Audio(listener);
 
 const audioLoader = new THREE.AudioLoader();
 audioLoader.load('./audio/bgm.mp3', function (buffer) {
@@ -79,12 +97,26 @@ audioLoader.load('./audio/punch.mp3', function (buffer) {
     punchSound.setBuffer(buffer);
     punchSound.setVolume(1.0);
 });
+audioLoader.load('./audio/teleport.wav', function (buffer) {
+    teleportSound.setBuffer(buffer);
+    teleportSound.setVolume(0.8);
+});
 
 // RENDERER
 const renderer = new THREE.WebGLRenderer({ antialias: true });
 renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.setPixelRatio(window.devicePixelRatio);
 renderer.shadowMap.enabled = settings.toggleShadows
+
+// POST PROCESSING (Teleport Effect)
+const composer = new EffectComposer(renderer);
+const renderPass = new RenderPass(scene, camera);
+composer.addPass(renderPass);
+
+const glitchPass = new GlitchPass();
+glitchPass.enabled = false;
+glitchPass.goWild = true; // intense teleport vibe
+composer.addPass(glitchPass);
 
 // CONTROLS
 const orbitControls = new OrbitControls(camera, renderer.domElement);
@@ -103,6 +135,7 @@ orbitControls.update();
 
 // LIGHTS
 let dirLight: THREE.DirectionalLight;
+let ambientLight: THREE.AmbientLight;
 light()
 
 // Array to hold walk-able surfaces for raycasting
@@ -194,20 +227,61 @@ gui.add(settings, 'enableAudio').name('Enable Audio (BGM)').onChange((v: boolean
         if (bgmSound.isPlaying) bgmSound.pause();
     }
 });
+export function triggerTeleportEffect(onPeak: () => void) {
+    // START TELEPORT EFFECT
+    glitchPass.enabled = true;
+    screenFlash.style.opacity = '1';
+
+    // Play Teleport Audio
+    if (teleportSound.buffer) {
+        if (teleportSound.isPlaying) teleportSound.stop();
+        teleportSound.play();
+    }
+
+    // Animate FOV warp
+    let warpInterval = setInterval(() => {
+        camera.fov = Math.min(camera.fov + 10, 150);
+        camera.updateProjectionMatrix();
+    }, 16);
+
+    setTimeout(() => {
+        clearInterval(warpInterval);
+
+        onPeak();
+
+        // END TELEPORT EFFECT
+        glitchPass.enabled = false;
+        screenFlash.style.opacity = '0';
+
+        // Snap FOV back
+        camera.fov = 45;
+        camera.updateProjectionMatrix();
+    }, 300); // Wait 300ms for glitch/flash to peak
+}
+
 gui.add(settings, 'currentMapId', ['map1', 'map2']).name('Select Map').onChange((v: string) => {
-    mapManager.loadMap(v).then((config) => {
-        if (characterControls) {
-            characterControls.model.position.copy(config.spawnPoint);
-            playerBody.position.copy(config.spawnPoint as any);
-            playerVelocityY = 0;
-            // Reposition dummies near the new spawn point
-            dummies.forEach((dummy, idx) => {
-                const offset = new THREE.Vector3(Math.cos(idx) * 2, 2, Math.sin(idx) * 2);
-                const spawn = config.spawnPoint.clone().add(offset);
-                dummy.body.position.copy(spawn as any);
-                dummy.body.velocity.set(0, 0, 0);
-            });
-        }
+    triggerTeleportEffect(() => {
+        mapManager.loadMap(v).then((config) => {
+            if (characterControls) {
+                characterControls.model.position.copy(config.spawnPoint);
+                playerBody.position.copy(config.spawnPoint as any);
+                playerVelocityY = 0;
+
+                // Reset camera instantly for the new map
+                characterControls.model.rotation.y = Math.PI;
+                characterControls.cameraTarget.set(config.spawnPoint.x, config.spawnPoint.y + 1, config.spawnPoint.z);
+                characterControls.camera.position.set(-2.54 + config.spawnPoint.x, 1.58 + config.spawnPoint.y, 6.34 + config.spawnPoint.z);
+                characterControls.orbitControl.target.copy(characterControls.cameraTarget);
+
+                // Reposition dummies near the new spawn point
+                dummies.forEach((dummy, idx) => {
+                    const offset = new THREE.Vector3(Math.cos(idx) * 2, 2, Math.sin(idx) * 2);
+                    const spawn = config.spawnPoint.clone().add(offset);
+                    dummy.body.position.copy(spawn as any);
+                    dummy.body.velocity.set(0, 0, 0);
+                });
+            }
+        });
     });
 });
 
@@ -350,10 +424,21 @@ spawnBox(4, 2);
 
 // MODEL WITH ANIMATIONS
 var characterControls: CharacterControls
+let flashLight: THREE.SpotLight;
+
 new GLTFLoader().load('models/RobotExpressive.glb', function (gltf) {
     const model = gltf.scene;
     // RobotExpressive model is large, scale it down
     model.scale.set(0.25, 0.25, 0.25);
+
+    // FLASHLIGHT
+    flashLight = new THREE.SpotLight(0xffffee, 5, 25, Math.PI / 5, 0.5, 1);
+    flashLight.position.set(0, 7, 0.5); // Position on top of head
+    flashLight.target.position.set(0, 3, 10); // Pointing forward
+    flashLight.castShadow = true;
+    flashLight.visible = false; // Off by default
+    model.add(flashLight);
+    model.add(flashLight.target);
     model.traverse(function (object: any) {
         if (object.isMesh) object.castShadow = true;
     });
@@ -372,7 +457,44 @@ new GLTFLoader().load('models/RobotExpressive.glb', function (gltf) {
 // CONTROL KEYS & MOUSE
 const keysPressed: { [key: string]: boolean } = {}
 
+let isNight = false;
+let smoothedCameraDist = -1;
+
 document.addEventListener('keydown', (event) => {
+    if (event.key === 'Tab') {
+        event.preventDefault(); // Stop browser from focusing UI elements
+
+        const willBeNight = !isNight;
+        if (willBeNight && bgmSound) bgmSound.setVolume(0); // Drop music instantly when going to night
+
+        triggerTeleportEffect(() => {
+            isNight = willBeNight;
+            if (isNight) {
+                // Night mode
+                ambientLight.intensity = 0.3;
+                ambientLight.color.setHex(0x555577); // Lighter blue tint
+                dirLight.intensity = 0.3;
+                dirLight.color.setHex(0x9999bb); // Brighter Moonlight
+                scene.background = new THREE.Color(0x0a0a1a); // Slightly brighter night sky
+            } else {
+                // Day mode
+                ambientLight.intensity = 0.7;
+                ambientLight.color.setHex(0xffffff);
+                dirLight.intensity = settings.lightIntensity; // Restore GUI setting
+                dirLight.color.setHex(0xffffff);
+                scene.background = settings.enableSkybox ? skyboxTexture : defaultBgColor;
+                if (bgmSound) bgmSound.setVolume(0.2); // Restore music after transition to day
+            }
+        });
+        return;
+    }
+
+    if (event.key.toLowerCase() === 'f') {
+        if (flashLight) {
+            flashLight.visible = !flashLight.visible;
+        }
+    }
+
     if (event.key === ' ') jumpBtn.pressDown();
     if (event.shiftKey && characterControls) {
         characterControls.switchRunToggle()
@@ -410,12 +532,12 @@ function performAttack() {
     if (settings.enableAudio && !bgmSound.isPlaying && bgmSound.buffer) {
         bgmSound.play();
     }
-    
+
     if (characterControls) {
         characterControls.attack();
 
         // Play punch sound
-        if (settings.enableAudio && punchSound.buffer) {
+        if (punchSound.buffer) {
             if (punchSound.isPlaying) punchSound.stop();
             punchSound.play();
         }
@@ -476,7 +598,7 @@ document.body.appendChild(debugPos);
 // ANIMATE
 function animate() {
     let mixerUpdateDelta = clock.getDelta();
-    
+
     // Update Virtual UI
     virtualJoystick.updateVisuals();
 
@@ -618,22 +740,43 @@ function animate() {
         const maxDist = dir.length();
         dir.normalize();
 
+        let targetDist = maxDist;
+
         const raycaster = new THREE.Raycaster(targetPos, dir, 0, maxDist);
         // Intersect only with environment meshes (walls/floor)
         const intersects = raycaster.intersectObjects(environmentMeshes, true);
 
-        if (intersects.length > 0) {
-            const margin = 0.2; // Move slightly in front of the wall to avoid clipping
-            const hitDist = intersects[0].distance;
-            if (hitDist > margin) {
-                camera.position.copy(targetPos).add(dir.multiplyScalar(hitDist - margin));
-            } else {
-                camera.position.copy(targetPos);
+        // Filter out gates and small objects from camera collision to prevent jitter
+        const validIntersects = intersects.filter(hit => {
+            let obj: THREE.Object3D | null = hit.object;
+            while (obj) {
+                const name = obj.name.toLowerCase();
+                if (name.includes('gate') || name.includes('enemie') || name.includes('boss') ||
+                    name.includes('guard') || name.includes('weapon') || name.includes('hand') ||
+                    name.includes('body') || name.includes('shield') || name.includes('arm') ||
+                    name.includes('leg') || name.includes('head') || name.includes('sword') || name.includes('spear') || name.includes('Shield_Spaers ') || name.includes('Chest_Bot') || name.includes('Chest_Top')) {
+                    return false;
+                }
+                obj = obj.parent;
             }
+            return true;
+        });
+
+        if (validIntersects.length > 0) {
+            const margin = 0.2; // Move slightly in front of the wall to avoid clipping
+            targetDist = Math.max(0, validIntersects[0].distance - margin);
         }
+
+        if (smoothedCameraDist === -1) smoothedCameraDist = targetDist;
+
+        // Smoothly lerp the distance. Zoom in faster (0.5) to avoid clipping, zoom out smoother (0.15)
+        const lerpSpeed = targetDist < smoothedCameraDist ? 0.5 : 0.15;
+        smoothedCameraDist += (targetDist - smoothedCameraDist) * lerpSpeed;
+
+        camera.position.copy(targetPos).add(dir.multiplyScalar(smoothedCameraDist));
     }
 
-    renderer.render(scene, camera);
+    composer.render();
 
     // Restore camera position so OrbitControls doesn't lose the desired zoom distance
     camera.position.copy(originalCameraPos);
@@ -648,15 +791,17 @@ function onWindowResize() {
     camera.aspect = window.innerWidth / window.innerHeight;
     camera.updateProjectionMatrix();
     renderer.setSize(window.innerWidth, window.innerHeight);
+    composer.setSize(window.innerWidth, window.innerHeight);
 }
 window.addEventListener('resize', onWindowResize);
 
 
 
 function light() {
-    scene.add(new THREE.AmbientLight(0xffffff, 0.7))
+    ambientLight = new THREE.AmbientLight(0xffffff, 0.7);
+    scene.add(ambientLight);
 
-    dirLight = new THREE.DirectionalLight(0xffffff, 1)
+    dirLight = new THREE.DirectionalLight(0xffffff, settings.lightIntensity);
     dirLight.position.set(- 60, 100, - 10);
     dirLight.castShadow = true;
     dirLight.shadow.camera.top = 50;
