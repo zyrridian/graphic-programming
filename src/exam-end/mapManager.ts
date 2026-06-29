@@ -122,6 +122,7 @@ export class MapManager {
                             trimeshBody.quaternion.copy(quaternion as any);
                             this.world.addBody(trimeshBody);
                             this.trackBody(trimeshBody);
+                            child.userData.physicsBody = trimeshBody;
                         }
                     }
                 });

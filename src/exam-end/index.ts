@@ -90,8 +90,22 @@ audioLoader.load('./audio/bgm.mp3', function (buffer) {
     bgmSound.setBuffer(buffer);
     bgmSound.setLoop(true);
     bgmSound.setVolume(0.2);
-    // Background music usually requires user interaction to play in modern browsers,
-    // so we'll start it if enableAudio is true when they first click or via GUI.
+    
+    // Try to autoplay immediately (works if browser allows it)
+    if (settings.enableAudio && !isNight) {
+        try { bgmSound.play(); } catch(e) {}
+    }
+    
+    // Fallback: If browser blocked autoplay, start it on the VERY FIRST click or keypress
+    const startAudio = () => {
+        if (settings.enableAudio && !bgmSound.isPlaying && !isNight) {
+            try { bgmSound.play(); } catch(e) {}
+        }
+        document.body.removeEventListener('click', startAudio);
+        document.body.removeEventListener('keydown', startAudio);
+    };
+    document.body.addEventListener('click', startAudio);
+    document.body.addEventListener('keydown', startAudio);
 });
 audioLoader.load('./audio/punch.mp3', function (buffer) {
     punchSound.setBuffer(buffer);
@@ -192,6 +206,37 @@ mapManager.loadMap(settings.currentMapId).then((config) => {
         characterControls.model.rotation.y = Math.PI; // Face forward (away from camera)
         characterControls.syncCamera();
     }
+    
+    // Find the gate and add a solid invisible blocker so the player can't walk through the holes
+    scene.traverse((child) => {
+        if (child.name === 'Gate_Global_Metal_0' && (child as THREE.Mesh).isMesh) {
+            const mesh = child as THREE.Mesh;
+            
+            if (!mesh.getObjectByName('GateBlocker')) {
+                mesh.geometry.computeBoundingBox();
+                if (mesh.geometry.boundingBox) {
+                    const bbox = mesh.geometry.boundingBox;
+                    const size = new THREE.Vector3();
+                    bbox.getSize(size);
+                    const center = new THREE.Vector3();
+                    bbox.getCenter(center);
+                    
+                    const blockerGeo = new THREE.BoxGeometry(size.x, size.y, size.z);
+                    // Make it visually invisible, but technically 'visible' so raycasters can hit it
+                    const blockerMat = new THREE.MeshBasicMaterial({ visible: false });
+                    
+                    const blockerMesh = new THREE.Mesh(blockerGeo, blockerMat);
+                    blockerMesh.name = 'GateBlocker';
+                    blockerMesh.position.copy(center);
+                    
+                    mesh.add(blockerMesh);
+                    environmentMeshes.push(blockerMesh);
+                }
+            }
+        }
+    });
+
+    updateHorrorVisibility();
 });
 
 // GUI (Requirement E)
@@ -380,6 +425,7 @@ function spawnFlamingo(x: number, z: number) {
     const dummyMesh = new THREE.Group();
     const flamingo = SkeletonUtils.clone(enemyModel) as THREE.Group;
     dummyMesh.add(flamingo);
+    dummyMesh.visible = isNight; // Start hidden if it's day
     scene.add(dummyMesh);
 
     const mixer = new THREE.AnimationMixer(flamingo);
@@ -460,6 +506,294 @@ const keysPressed: { [key: string]: boolean } = {}
 let isNight = false;
 let smoothedCameraDist = -1;
 
+// --- CLOCK UI & START SCREEN ---
+const extraStyles = document.createElement('style');
+extraStyles.innerHTML = `
+@keyframes clockFlash {
+    0% { transform: translateX(0); color: white; border-color: white; }
+    25% { transform: translateX(-5px); color: red; border-color: red; }
+    50% { transform: translateX(5px); color: red; border-color: red; }
+    75% { transform: translateX(-5px); color: red; border-color: red; }
+    100% { transform: translateX(0); color: white; border-color: white; }
+}
+.clock-flash {
+    animation: clockFlash 0.3s ease-in-out;
+}
+`;
+document.head.appendChild(extraStyles);
+
+const clockUI = document.createElement('div');
+clockUI.id = 'clock-ui';
+clockUI.style.position = 'absolute';
+clockUI.style.top = '20px';
+clockUI.style.left = '20px';
+clockUI.style.width = '120px';
+clockUI.style.height = '120px';
+clockUI.style.borderRadius = '50%';
+clockUI.style.backgroundColor = 'rgba(0,0,0,0.5)';
+clockUI.style.border = '2px solid white';
+clockUI.style.display = 'flex';
+clockUI.style.flexDirection = 'column';
+clockUI.style.alignItems = 'center';
+clockUI.style.justifyContent = 'center';
+clockUI.style.fontSize = '30px';
+clockUI.style.fontFamily = 'monospace';
+clockUI.style.color = 'white';
+clockUI.style.fontWeight = 'bold';
+clockUI.style.textShadow = '1px 1px 2px rgba(0,0,0,0.8)';
+clockUI.style.pointerEvents = 'none';
+clockUI.style.zIndex = '100';
+document.body.appendChild(clockUI);
+
+function updateClock() {
+    clockUI.innerHTML = new Date().toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit' });
+}
+updateClock();
+setInterval(updateClock, 1000); // update every second to guarantee accurate time boundaries
+
+const startScreen = document.createElement('div');
+startScreen.id = 'start-screen';
+startScreen.style.position = 'absolute';
+startScreen.style.top = '0';
+startScreen.style.left = '0';
+startScreen.style.width = '100vw';
+startScreen.style.height = '100vh';
+startScreen.style.backgroundColor = 'rgba(0,0,0,0.8)';
+startScreen.style.color = 'white';
+startScreen.style.display = 'flex';
+startScreen.style.alignItems = 'center';
+startScreen.style.justifyContent = 'center';
+startScreen.style.fontSize = '30px';
+startScreen.style.fontFamily = 'monospace';
+startScreen.style.cursor = 'pointer';
+startScreen.style.zIndex = '9999';
+startScreen.innerHTML = 'Click anywhere to Start';
+document.body.appendChild(startScreen);
+
+startScreen.addEventListener('click', () => {
+    startScreen.remove();
+    settings.enableAudio = true;
+    initAudio();
+    // @ts-ignore
+    if (typeof bgmSound !== 'undefined' && bgmSound && bgmSound.buffer) bgmSound.play();
+});
+
+let hasAutoNightTriggered = false;
+
+// --- FLASHLIGHT UI & AUDIO ---
+let hasSeenNight = false;
+const flashlightUI = document.createElement('div');
+flashlightUI.id = 'flashlight-ui';
+flashlightUI.style.position = 'absolute';
+flashlightUI.style.bottom = '20px';
+flashlightUI.style.right = '20px';
+flashlightUI.style.fontSize = '32px';
+flashlightUI.style.opacity = '0';
+flashlightUI.style.transition = 'opacity 0.3s, filter 0.3s';
+flashlightUI.innerHTML = '🔦<div style="position:absolute; bottom:-4px; right:-8px; background:#111; color:#fff; font-size:12px; font-family:monospace; padding:2px 5px; border-radius:4px; font-weight:bold; border:1px solid #555; line-height:1; letter-spacing:0;">F</div>';
+flashlightUI.style.filter = 'grayscale(100%) opacity(0.5)';
+document.body.appendChild(flashlightUI);
+
+function updateFlashlightUI() {
+    if (isNight) {
+        flashlightUI.style.opacity = '1';
+        flashlightUI.style.filter = flashLight && flashLight.visible ? 'drop-shadow(0 0 10px yellow)' : 'grayscale(100%) opacity(0.5)';
+    } else {
+        flashlightUI.style.opacity = '0';
+    }
+}
+
+function showFlashlightHint() {
+    const hint = document.createElement('div');
+    hint.id = 'flashlight-hint';
+    hint.innerHTML = 'Press <b>F</b> to toggle flashlight<br><span style="font-size:16px; opacity:0.8;">Press <b>Tab</b> to return to day</span>';
+    hint.style.position = 'absolute';
+    hint.style.top = '20%';
+    hint.style.left = '50%';
+    hint.style.transform = 'translate(-50%, -50%)';
+    hint.style.color = 'white';
+    hint.style.fontFamily = 'monospace';
+    hint.style.fontSize = '24px';
+    hint.style.textAlign = 'center';
+    hint.style.textShadow = '0 2px 4px black';
+    hint.style.opacity = '0';
+    hint.style.transition = 'opacity 1s';
+    hint.style.pointerEvents = 'none';
+    document.body.appendChild(hint);
+
+    requestAnimationFrame(() => hint.style.opacity = '1');
+    setTimeout(() => {
+        if (document.getElementById('flashlight-hint')) {
+            hint.style.opacity = '0';
+            setTimeout(() => hint.remove(), 1000);
+        }
+    }, 5000);
+}
+
+let audioCtx: AudioContext | null = null;
+let nightOsc: OscillatorNode | null = null;
+let nightGain: GainNode | null = null;
+
+function initAudio() {
+    if (!audioCtx) audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
+    if (audioCtx.state === 'suspended') audioCtx.resume();
+}
+
+function playFlashlightSFX() {
+    initAudio();
+    if (!audioCtx) return;
+    const osc = audioCtx.createOscillator();
+    const gain = audioCtx.createGain();
+    osc.connect(gain);
+    gain.connect(audioCtx.destination);
+    osc.type = 'square';
+    osc.frequency.setValueAtTime(1200, audioCtx.currentTime);
+    osc.frequency.exponentialRampToValueAtTime(100, audioCtx.currentTime + 0.05);
+    gain.gain.setValueAtTime(0.3, audioCtx.currentTime); // Increased volume
+    gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.05);
+    osc.start();
+    osc.stop(audioCtx.currentTime + 0.05);
+}
+
+function playNightBGM() {
+    initAudio();
+    if (!audioCtx) return;
+    if (nightOsc) return;
+    nightOsc = audioCtx.createOscillator();
+    nightGain = audioCtx.createGain();
+
+    nightOsc.type = 'triangle';
+    nightOsc.frequency.setValueAtTime(110, audioCtx.currentTime);
+
+    // Pitch LFO
+    const pitchLFO = audioCtx.createOscillator();
+    pitchLFO.type = 'sine';
+    pitchLFO.frequency.value = 0.2;
+    const pitchLFOGain = audioCtx.createGain();
+    pitchLFOGain.gain.value = 5;
+    pitchLFO.connect(pitchLFOGain);
+    pitchLFOGain.connect(nightOsc.frequency);
+    pitchLFO.start();
+
+    // Volume LFO (makes it ebb and flow into silence)
+    const volLFO = audioCtx.createOscillator();
+    volLFO.type = 'sine';
+    volLFO.frequency.value = 0.05; // Very slow, 20-second cycle
+    const volLFOGain = audioCtx.createGain();
+    volLFOGain.gain.value = 0.15; // Swings by +/- 0.15
+    volLFO.connect(volLFOGain);
+    volLFOGain.connect(nightGain.gain);
+    volLFO.start();
+
+    nightOsc.connect(nightGain);
+    nightGain.connect(audioCtx.destination);
+
+    // Base gain ramps up to 0.15. Combined with volLFO, it sweeps gently between 0.0 (silence) and 0.30
+    nightGain.gain.setValueAtTime(0, audioCtx.currentTime);
+    nightGain.gain.linearRampToValueAtTime(0.15, audioCtx.currentTime + 3);
+
+    nightOsc.start();
+}
+
+function stopNightBGM() {
+    if (nightOsc && nightGain && audioCtx) {
+        nightGain.gain.cancelScheduledValues(audioCtx.currentTime);
+        nightGain.gain.setValueAtTime(nightGain.gain.value, audioCtx.currentTime);
+        nightGain.gain.linearRampToValueAtTime(0, audioCtx.currentTime + 0.05); // Instant cut without popping
+        nightOsc.stop(audioCtx.currentTime + 0.1);
+        nightOsc = null;
+        nightGain = null;
+    }
+}
+
+function toggleFlashlightBGM() {
+    if (!audioCtx || !nightGain) return;
+    nightGain.gain.cancelScheduledValues(audioCtx.currentTime);
+    nightGain.gain.setValueAtTime(nightGain.gain.value, audioCtx.currentTime);
+    if (flashLight && flashLight.visible) {
+        nightGain.gain.linearRampToValueAtTime(0, audioCtx.currentTime + 0.5);
+    } else {
+        nightGain.gain.linearRampToValueAtTime(0.15, audioCtx.currentTime + 2);
+    }
+}
+
+function isHorrorObject(objName: string) {
+    const lowerName = objName.toLowerCase();
+    
+    if (lowerName.includes('enemie') || lowerName.includes('boss')) {
+        return true;
+    }
+    
+    // Explicitly match only the specific horror Shields (1-5) and Cubes (4-9) to avoid breaking map walls!
+    if (objName.match(/Shield\.00[1-5]/i)) return true;
+    if (objName.match(/Cube\.00[4-9]/i)) return true;
+    
+    // Note: Do NOT use lowerName.includes('cube') because it will match all walls in the game and remove their collision!
+    return false;
+}
+
+function updateHorrorVisibility() {
+    scene.traverse((child) => {
+        // Check if the current object OR ANY OF ITS PARENTS match the horror names
+        let isHorror = false;
+        let obj: THREE.Object3D | null = child;
+        while (obj) {
+            if (isHorrorObject(obj.name || '')) {
+                isHorror = true;
+                break;
+            }
+            obj = obj.parent;
+        }
+
+        if (isHorror) {
+            // Horror elements are visible and physical ONLY at night
+            child.visible = isNight;
+
+            if (child.userData && child.userData.physicsBody) {
+                const body = child.userData.physicsBody;
+                if (isNight) {
+                    if (!body.world) world.addBody(body);
+                } else {
+                    if (body.world) world.removeBody(body);
+                }
+            }
+        }
+
+        // Handle Gates: Open during the day, closed at night
+        // Explicitly target ONLY the door of the first gate
+        const exactName = child.name;
+        if ((exactName === 'Gate_Global_Metal_0') && (child as THREE.Mesh).isMesh) {
+            if (child.userData.originalY === undefined) {
+                child.userData.originalY = child.position.y;
+            }
+
+            const openOffset = 2.5; // Move up by 2.5 units to open
+            const offset = isNight ? 0 : openOffset;
+            child.position.y = child.userData.originalY + offset;
+
+            if (child.userData.physicsBody) {
+                const body = child.userData.physicsBody;
+                if (body.userData === undefined) body.userData = {};
+                if (body.userData.originalY === undefined) {
+                    body.userData.originalY = body.position.y;
+                }
+                body.position.y = body.userData.originalY + offset;
+            }
+        }
+    });
+};
+
+// Global debug helper
+(window as any).dumpSceneNodes = function () {
+    let output = '';
+    scene.traverse((child) => {
+        output += `${child.type}: ${child.name} (Visible: ${child.visible})\n`;
+    });
+    console.log(output);
+    return "Dumped to console";
+};
+// ------------------------------
+
 document.addEventListener('keydown', (event) => {
     if (event.key === 'Tab') {
         event.preventDefault(); // Stop browser from focusing UI elements
@@ -469,6 +803,15 @@ document.addEventListener('keydown', (event) => {
 
         triggerTeleportEffect(() => {
             isNight = willBeNight;
+
+            // Trigger clock UI animation
+            const clockEl = document.getElementById('clock-ui');
+            if (clockEl) {
+                clockEl.classList.remove('clock-flash');
+                void clockEl.offsetWidth; // trigger reflow
+                clockEl.classList.add('clock-flash');
+            }
+
             if (isNight) {
                 // Night mode
                 ambientLight.intensity = 0.3;
@@ -476,6 +819,18 @@ document.addEventListener('keydown', (event) => {
                 dirLight.intensity = 0.3;
                 dirLight.color.setHex(0x9999bb); // Brighter Moonlight
                 scene.background = new THREE.Color(0x0a0a1a); // Slightly brighter night sky
+
+                // Reveal flamingos
+                for (const dummy of dummies) {
+                    if (dummy.isBird) dummy.mesh.visible = true;
+                }
+
+                if (!hasSeenNight) {
+                    hasSeenNight = true;
+                    showFlashlightHint();
+                }
+                playNightBGM();
+                updateFlashlightUI();
             } else {
                 // Day mode
                 ambientLight.intensity = 0.7;
@@ -484,7 +839,17 @@ document.addEventListener('keydown', (event) => {
                 dirLight.color.setHex(0xffffff);
                 scene.background = settings.enableSkybox ? skyboxTexture : defaultBgColor;
                 if (bgmSound) bgmSound.setVolume(0.2); // Restore music after transition to day
+
+                // Hide flamingos
+                for (const dummy of dummies) {
+                    if (dummy.isBird) dummy.mesh.visible = false;
+                }
+
+                stopNightBGM();
+                updateFlashlightUI();
             }
+
+            updateHorrorVisibility();
         });
         return;
     }
@@ -492,6 +857,16 @@ document.addEventListener('keydown', (event) => {
     if (event.key.toLowerCase() === 'f') {
         if (flashLight) {
             flashLight.visible = !flashLight.visible;
+            if (isNight) {
+                playFlashlightSFX();
+                updateFlashlightUI();
+                toggleFlashlightBGM(); // Toggle background hum when flashlight changes state
+                const hint = document.getElementById('flashlight-hint');
+                if (hint) {
+                    hint.style.opacity = '0';
+                    setTimeout(() => hint.remove(), 500);
+                }
+            }
         }
     }
 
@@ -586,8 +961,8 @@ const clock = new THREE.Clock();
 // DEBUG UI
 const debugPos = document.createElement('div');
 debugPos.style.position = 'absolute';
-debugPos.style.top = '10px';
-debugPos.style.left = '10px';
+debugPos.style.top = '20px';
+debugPos.style.left = '160px'; // Pushed to the right of the clock
 debugPos.style.color = 'white';
 debugPos.style.background = 'rgba(0,0,0,0.5)';
 debugPos.style.padding = '10px';
@@ -603,7 +978,7 @@ function animate() {
     virtualJoystick.updateVisuals();
 
     if (characterControls) {
-        characterControls.update(mixerUpdateDelta, keysPressed);
+        characterControls.update(mixerUpdateDelta, keysPressed, environmentMeshes);
 
         const pos = characterControls.model.position;
         debugPos.innerHTML = `Player: x: ${pos.x.toFixed(2)}, y: ${pos.y.toFixed(2)}, z: ${pos.z.toFixed(2)}<br>Camera: x: ${camera.position.x.toFixed(2)}, y: ${camera.position.y.toFixed(2)}, z: ${camera.position.z.toFixed(2)}`;
@@ -620,9 +995,11 @@ function animate() {
             new THREE.Vector3(0, -1, 0)
         );
         const intersects = raycaster.intersectObjects(environmentMeshes, true);
+        const validIntersects = intersects.filter(hit => hit.object.visible);
+        
         let floorY = -100;
-        if (intersects.length > 0) {
-            floorY = intersects[0].point.y;
+        if (validIntersects.length > 0) {
+            floorY = validIntersects[0].point.y;
         }
 
         // Apply Gravity & Jumping
@@ -681,13 +1058,21 @@ function animate() {
 
         // Pathfinding AI for Flamingos
         if (dummy.isBird && characterControls && characterControls.model) {
-            if (inSafeZone) {
+            const playerPos = characterControls.model.position;
+            const dummyPos = dummy.mesh.position;
+            const dir = new THREE.Vector3().subVectors(playerPos, dummyPos);
+
+            // --- Auto Night Trigger ---
+            if (!hasAutoNightTriggered && dir.length() < 2.0 && !isNight) {
+                hasAutoNightTriggered = true;
+                const tabEvent = new KeyboardEvent('keydown', { key: 'Tab' });
+                document.dispatchEvent(tabEvent);
+            }
+
+            if (inSafeZone || !isNight) {
                 dummy.body.velocity.x = 0;
                 dummy.body.velocity.z = 0;
             } else {
-                const playerPos = characterControls.model.position;
-                const dummyPos = dummy.mesh.position;
-                const dir = new THREE.Vector3().subVectors(playerPos, dummyPos);
                 dir.y = 0; // ignore vertical difference for pathfinding
 
                 if (dir.length() > 1.5) {
@@ -746,15 +1131,20 @@ function animate() {
         // Intersect only with environment meshes (walls/floor)
         const intersects = raycaster.intersectObjects(environmentMeshes, true);
 
-        // Filter out gates and small objects from camera collision to prevent jitter
+        // Filter out gates, small objects, and invisible objects from camera collision to prevent jitter
         const validIntersects = intersects.filter(hit => {
+            if (!hit.object.visible) return false;
+
             let obj: THREE.Object3D | null = hit.object;
             while (obj) {
-                const name = obj.name.toLowerCase();
-                if (name.includes('gate') || name.includes('enemie') || name.includes('boss') ||
+                const name = (obj.name || '').toLowerCase();
+
+                // If it's a horror object (enemy, boss, shield, spear cube), never collide with it
+                if (isHorrorObject(obj.name || '')) return false;
+
+                if ( name.includes('enemie') || name.includes('boss') ||
                     name.includes('guard') || name.includes('weapon') || name.includes('hand') ||
-                    name.includes('body') || name.includes('shield') || name.includes('arm') ||
-                    name.includes('leg') || name.includes('head') || name.includes('sword') || name.includes('spear') || name.includes('Shield_Spaers ') || name.includes('Chest_Bot') || name.includes('Chest_Top')) {
+                    name.includes('body') || name.includes('shield_spears') || name.includes('chest')) {
                     return false;
                 }
                 obj = obj.parent;

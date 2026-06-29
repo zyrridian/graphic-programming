@@ -101,7 +101,7 @@ export class CharacterControls {
         }
     }
 
-    public update(delta: number, keysPressed: any) {
+    public update(delta: number, keysPressed: any, collidables?: THREE.Object3D[]) {
 
         const directionPressed = DIRECTIONS.some(key => keysPressed[key] == true)
 
@@ -154,10 +154,54 @@ export class CharacterControls {
             const velocity = play == 'Running' ? this.runVelocity : this.walkVelocity
 
             // move model & camera
-            const moveX = this.walkDirection.x * velocity * delta
-            const moveZ = this.walkDirection.z * velocity * delta
-            this.model.position.x += moveX
-            this.model.position.z += moveZ
+            const moveX = this.walkDirection.x * velocity * delta;
+            const moveZ = this.walkDirection.z * velocity * delta;
+            
+            if (collidables && collidables.length > 0) {
+                const radius = 0.4;
+                
+                // Helper to check collision in a specific direction
+                const checkCollision = (dir: THREE.Vector3, moveDist: number) => {
+                    // Create a vector perpendicular to movement to offset rays sideways (creating a "wide" raycast)
+                    const right = new THREE.Vector3(-dir.z, 0, dir.x).normalize();
+                    
+                    // Cast rays starting from knee height (0.5) up to head (1.5). 
+                    for (let h = 0.5; h <= 1.5; h += 0.5) {
+                        // Cast 3 parallel rays horizontally: Left (-0.3), Center (0), Right (0.3)
+                        for (let offset = -0.3; offset <= 0.3; offset += 0.3) {
+                            const rayOrigin = new THREE.Vector3(
+                                this.model.position.x + right.x * offset,
+                                this.model.position.y + h,
+                                this.model.position.z + right.z * offset
+                            );
+                            // The 4th parameter of Raycaster is 'far' (distance), NOT thickness! 
+                            const ray = new THREE.Raycaster(rayOrigin, dir, 0, radius + moveDist);
+                            const hits = ray.intersectObjects(collidables, true);
+                            if (hits.some(hit => hit.object.visible)) return true;
+                        }
+                    }
+                    return false;
+                };
+
+                // Check X axis
+                if (Math.abs(moveX) > 0) {
+                    const dirX = new THREE.Vector3(Math.sign(moveX), 0, 0);
+                    if (!checkCollision(dirX, Math.abs(moveX))) {
+                        this.model.position.x += moveX;
+                    }
+                }
+                
+                // Check Z axis
+                if (Math.abs(moveZ) > 0) {
+                    const dirZ = new THREE.Vector3(0, 0, Math.sign(moveZ));
+                    if (!checkCollision(dirZ, Math.abs(moveZ))) {
+                        this.model.position.z += moveZ;
+                    }
+                }
+            } else {
+                this.model.position.x += moveX;
+                this.model.position.z += moveZ;
+            }
             
             // We don't need to manually move the camera here anymore, 
             // syncCamera will handle it based on the model's new position.
