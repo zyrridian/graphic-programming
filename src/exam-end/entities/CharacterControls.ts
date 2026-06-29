@@ -1,6 +1,6 @@
 import * as THREE from 'three'
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js'
-import { A, D, DIRECTIONS, S, W } from './utils'
+import { A, D, DIRECTIONS, S, W } from '../utils'
 
 
 export class CharacterControls {
@@ -12,7 +12,7 @@ export class CharacterControls {
     camera: THREE.Camera
 
     // state
-    toggleRun: boolean = true
+    toggleRun: boolean = false
     currentAction: string
     isEmoting: boolean = false
     isJumping: boolean = false
@@ -106,7 +106,7 @@ export class CharacterControls {
         const directionPressed = DIRECTIONS.some(key => keysPressed[key] == true)
 
         var play = '';
-        if (directionPressed && this.toggleRun) {
+        if (directionPressed && (this.toggleRun || keysPressed['shift'])) {
             play = 'Running'
         } else if (directionPressed) {
             play = 'Walking'
