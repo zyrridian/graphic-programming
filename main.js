@@ -56,6 +56,13 @@ const sessions = [
     tags: ["Skybox", "Orbit", "First Person"],
   },
   {
+    id: 10,
+    title: "Session 10",
+    description: "Particle system animations using procedural canvas textures.",
+    href: `${base}src/session10/index.html`,
+    tags: ["Particles", "Textures", "Animation"],
+  },
+  {
     id: 7,
     title: "Mid Exam",
     description: "Midterm examination covering sessions 1-6 concepts.",
@@ -64,26 +71,10 @@ const sessions = [
   },
   {
     id: 8,
-    title: "████ █████",
-    description: "██████████ █████████ ████ ███████ ████ ████████.",
-    href: null,
-    tags: ["██████", "███████", "███████"],
-    locked: true,
-  },
-  {
-    id: 9,
-    title: "████ █████",
-    description: "████ ██████ ███ ████ █████ ████████ ███ ████ ████████.",
-    href: null,
-    tags: ["████████", "████ ███████", "████ █████"],
-    locked: true,
-  },
-  {
-    id: 10,
-    title: "Session 10",
-    description: "Particle system animations using procedural canvas textures.",
-    href: `${base}src/session10/index.html`,
-    tags: ["Particles", "Textures", "Animation"],
+    title: "End Exam",
+    description: "Final examination covering all concepts.",
+    href: `${base}src/exam-end/index.html`,
+    tags: ["Final", "Assessment", "Comprehensive"],
   },
 ];
 
