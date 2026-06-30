@@ -214,7 +214,7 @@ setupLighting();
 mapManager.registerMap({
     id: 'map1',
     name: 'Dungeon',
-    glbPath: 'models/dungeon.glb',
+    glbPath: 'models/MapDungeon.glb',
     spawnPoint: new THREE.Vector3(10.13, 0.40, 16.03),
     scale: 1,
 });

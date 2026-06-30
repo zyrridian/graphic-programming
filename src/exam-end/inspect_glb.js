@@ -1,7 +1,7 @@
 const fs = require('fs');
 
 // We will just read the GLB file. GLB is binary but the JSON chunk is plain text.
-const buffer = fs.readFileSync('d:/graphic_programming/src/exam-end/models/dungeon.glb');
+const buffer = fs.readFileSync('d:/graphic_programming/src/exam-end/models/MapDungeon.glb');
 
 // GLB header: magic (4), version (4), length (4)
 const magic = buffer.readUInt32LE(0);
