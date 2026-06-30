@@ -44,6 +44,15 @@ const scene = new THREE.Scene();
 const defaultBgColor = new THREE.Color(0xa8def0);
 scene.background = defaultBgColor;
 
+// Chest Glow Indicator
+const chestPos = new THREE.Vector3(-5.23, 1.78, 3.66);
+const chestGlowGeo = new THREE.RingGeometry(0.8, 1.2, 32);
+const chestGlowMat = new THREE.MeshBasicMaterial({ color: 0xffff44, side: THREE.DoubleSide, transparent: true, opacity: 0.6 });
+const chestGlowMesh = new THREE.Mesh(chestGlowGeo, chestGlowMat);
+chestGlowMesh.position.set(chestPos.x, chestPos.y + 0.3, chestPos.z);
+chestGlowMesh.rotation.x = Math.PI / 2;
+scene.add(chestGlowMesh);
+
 const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 1000);
 camera.position.set(-2.54, 1.58, 6.34);
 
@@ -111,8 +120,13 @@ const audioManager = new AudioManager(camera);
 const uiManager = new UIManager();
 const inputManager = new InputManager(() => performAttack());
 const particleSystem = new ParticleSystem(scene);
-const atmosphereSystem = new AtmosphereSystem(scene);
 const eventSystem = new EventSystem();
+const atmosphereSystem = new AtmosphereSystem(scene);
+
+let theBoss: BoxEnemyAI | null = null;
+let isNearBoss: boolean = false;
+let isNearChest: boolean = false;
+let bossDialogueStage: number = 0;
 
 // STATE
 let player: Player | null = null;
@@ -122,6 +136,11 @@ let smoothedCameraDist = -1;
 let flashLight: THREE.SpotLight;
 let hasSeenNight = false;
 let canToggleNight = false;
+let isCutscenePlaying = false;
+let hasChestKey = false;
+let isChestOpen = false;
+let cutsceneCameraTarget = new THREE.Vector3();
+let cutscenePlayerTarget = new THREE.Vector3();
 
 // LIGHTS & ENVIRONMENT
 let dirLight: THREE.DirectionalLight;
@@ -332,7 +351,8 @@ function spawnBox(x: number, z: number) {
     dummyBody.addShape(shape);
     world.addBody(dummyBody);
 
-    enemies.push(new BoxEnemyAI(dummyMesh, dummyBody));
+    theBoss = new BoxEnemyAI(dummyMesh, dummyBody);
+    enemies.push(theBoss);
 }
 
 let enemyModel: THREE.Group;
@@ -455,6 +475,7 @@ emoteFolder.add(emoteParams, 'playYes').name('Yes');
 
 // LOGIC & EVENTS
 function performAttack() {
+    if (isCutscenePlaying) return;
     if (settings.enableAudio && !audioManager.bgmSound.isPlaying && audioManager.bgmSound.buffer) {
         audioManager.bgmSound.play();
     }
@@ -473,9 +494,23 @@ function performAttack() {
                 const forceDir = new THREE.Vector3().subVectors(enemy.mesh.position, player.controls.model.position);
                 forceDir.y = 1;
                 forceDir.normalize();
-                const impulseForce = 150;
+                const impulseForce = 20; // Reduced from 150 so it doesn't fly into orbit!
                 const impulse = new CANNON.Vec3(forceDir.x * impulseForce, forceDir.y * impulseForce, forceDir.z * impulseForce);
                 enemy.body.applyImpulse(impulse, new CANNON.Vec3(0, -0.5, 0));
+                
+                enemy.hp = (enemy.hp === undefined ? 3 : enemy.hp) - 1;
+                
+                if (enemy.hp <= 0) {
+                    scene.remove(enemy.mesh);
+                    world.removeBody(enemy.body);
+                    enemies.splice(i, 1);
+                    if (enemy.isBird) {
+                        hasChestKey = true;
+                        uiManager.showNotification('Flamingo defeated! You found the Chest Key!');
+                        uiManager.showKey();
+                        if (audioManager) audioManager.playKeySFX();
+                    }
+                }
             }
         }
     }
@@ -539,6 +574,7 @@ document.addEventListener('keydown', (event) => {
     if (event.key === 'Tab') {
         event.preventDefault();
         if (!canToggleNight) return;
+        if (isCutscenePlaying && event.isTrusted) return;
         
         const willBeNight = !isNight;
         if (willBeNight && audioManager.bgmSound) audioManager.bgmSound.setVolume(0);
@@ -558,7 +594,7 @@ document.addEventListener('keydown', (event) => {
                 moonMesh.visible = true;
                 atmosphereSystem.setVisible(false);
 
-                enemies.forEach(e => { if (e.isBird) e.mesh.visible = true; });
+                enemies.forEach(e => { if (e.isBird) e.mesh.visible = false; });
 
                 if (!hasSeenNight) {
                     hasSeenNight = true;
@@ -577,7 +613,7 @@ document.addEventListener('keydown', (event) => {
                 moonMesh.visible = false;
                 atmosphereSystem.setVisible(true);
 
-                enemies.forEach(e => { if (e.isBird) e.mesh.visible = false; });
+                enemies.forEach(e => { if (e.isBird) e.mesh.visible = true; });
                 audioManager.stopNightBGM();
                 uiManager.updateFlashlightUI(isNight, flashLight && flashLight.visible);
             }
@@ -602,6 +638,83 @@ document.addEventListener('keydown', (event) => {
             }
         }
     }
+
+    if (event.key.toLowerCase() === 'e') {
+        if ((event.key === 'e' || event.key === 'E') && isNearChest && !isChestOpen && !isCutscenePlaying && player) {
+            if (hasChestKey) {
+                isChestOpen = true;
+                chestGlowMesh.visible = false;
+                uiManager.showNotification('Chest opened! You found a mysterious artifact!');
+                uiManager.hideInteractionPrompt();
+                uiManager.hideKey();
+                
+                uiManager.showFinishedScreen();
+                if (audioManager) {
+                    if (audioManager.bgmSound) audioManager.bgmSound.setVolume(0);
+                    audioManager.playSuccessMusic();
+                }
+            } else {
+                uiManager.showNotification('Locked. You need a key.');
+            }
+        }
+
+        // Boss interaction trigger
+        if ((event.key === 'e' || event.key === 'E') && isNearBoss && !isCutscenePlaying && player) {
+            uiManager.hideInteractionPrompt();
+            isCutscenePlaying = true;
+            
+            // Boss interaction trigger
+            // The Boss is the static throne at ~ (11.13, 2.5, -15.34)
+            const thronePos = new THREE.Vector3(11.13, 1.5, -15.34);
+            cutscenePlayerTarget.copy(thronePos);
+            
+            // Camera fix: Over the shoulder, looking at the boss
+            cutsceneCameraTarget.set(12.0, 2.8, -8.0);
+            
+            const typeCallback = (speaker: string) => audioManager.playTalkSFX(speaker);
+            
+            if (bossDialogueStage === 0) {
+                uiManager.startCutsceneDialogue([
+                    { speaker: 'Boss', text: "Ah, Aegis... you've finally arrived to claim your prize..." },
+                    { speaker: 'Boss', text: "Wait. You're not Aegis. You're just a tiny scrap of metal!" },
+                    { speaker: 'Boss', text: "How did a mere worker robot enter this domain? Time is frozen for all but the Hero!" },
+                    { speaker: 'Boss', text: "Do you truly believe you have the power to defeat me?", choices: [
+                        { text: 'YES', callback: () => {
+                            player?.controls.playEmote('Yes');
+                            uiManager.startCutsceneDialogue([
+                                { speaker: 'Boss', text: "Foolish metal scrap! We shall see!" }
+                            ], () => { isCutscenePlaying = false; bossDialogueStage = 1; }, typeCallback);
+                        }},
+                        { text: 'NO', callback: () => {
+                            player?.controls.playEmote('No');
+                            uiManager.startCutsceneDialogue([
+                                { speaker: 'Boss', text: "Hah! Smart choice. But you won't leave here alive anyway." }
+                            ], () => { isCutscenePlaying = false; bossDialogueStage = 1; }, typeCallback);
+                        }}
+                    ]}
+                ], () => {}, typeCallback);
+            } else if (bossDialogueStage === 1) {
+                uiManager.startCutsceneDialogue([
+                    { speaker: 'Boss', text: "Still here, little machine? The frozen time won't protect you forever." },
+                    { speaker: 'Boss', text: "Only the true Aegis can wield the power to unfreeze this dungeon." }
+                ], () => { isCutscenePlaying = false; bossDialogueStage = 2; }, typeCallback);
+            } else if (bossDialogueStage === 2) {
+                uiManager.startCutsceneDialogue([
+                    { speaker: 'Boss', text: "That unusual aura you possess... It rivals Aegis himself." },
+                    { speaker: 'Boss', text: "Could it be that the time anomaly... gave you consciousness?" }
+                ], () => { isCutscenePlaying = false; bossDialogueStage = 3; }, typeCallback);
+            } else {
+                uiManager.startCutsceneDialogue([
+                    { speaker: 'Boss', text: "Go on, tiny anomaly. The chest awaits." },
+                    { speaker: 'Boss', text: "Let us see if you can rewrite history." }
+                ], () => { isCutscenePlaying = false; }, typeCallback);
+            }
+        }
+    }
+});
+
+document.addEventListener('playerDied', () => {
+    if (audioManager) audioManager.playRobotDeathSFX();
 });
 
 const clock = new THREE.Clock();
@@ -642,16 +755,96 @@ eventSystem.addTrigger(new TriggerBox(
     }
 ));
 
+eventSystem.addTrigger(new TriggerBox(
+    new THREE.Vector3(-6.00, 0.00, -9.00),
+    new THREE.Vector3(17.00, 7.00, -8.00),
+    () => {
+        const startCutscene = () => {
+            isCutscenePlaying = true;
+            if (player) {
+                // Position camera slightly behind and above the player
+                cutsceneCameraTarget.copy(player.controls.model.position).add(new THREE.Vector3(0, 2.23, 6.75));
+            } else {
+                cutsceneCameraTarget.set(11.14, 3.73, 2.96);
+            }
+            // Focus point: the throne
+            cutscenePlayerTarget.set(11.13, 2.58, -15.34);
+            
+            const dialogueLore = [
+                { speaker: "Bone Lord Malakor", text: "Rise, my minions! The time has come to reclaim our domain.", speakerColor: "#ff4444" },
+                { speaker: "Bone Lord Malakor", text: "These trespassing fools think they can pillage our treasures...", speakerColor: "#ff4444" },
+                { speaker: "Bone Lord Malakor", text: "Show them the true meaning of despair! Leave no survivors!", speakerColor: "#ff4444" }
+            ];
+
+            uiManager.startCutsceneDialogue(dialogueLore, () => {
+                isCutscenePlaying = false;
+            }, () => {
+                if (audioManager) audioManager.playDialogueBeep();
+            });
+        };
+
+        if (!isNight) {
+            // Force night mode and start cutscene after transition peak
+            document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Tab' }));
+            setTimeout(startCutscene, 300);
+        } else {
+            startCutscene();
+        }
+    }
+));
+
 // MAIN LOOP
 function animate() {
     let delta = clock.getDelta();
     inputManager.updateVisuals();
 
     if (player) {
-        player.update(delta, inputManager.keysPressed, environmentMeshes, mapManager.maps.get(settings.currentMapId));
+        if (isCutscenePlaying) {
+            player.update(delta, {}, environmentMeshes, mapManager.maps.get(settings.currentMapId));
+            const lookPos = new THREE.Vector3(cutscenePlayerTarget.x, player.controls.model.position.y, cutscenePlayerTarget.z);
+            player.controls.model.lookAt(lookPos);
+        } else {
+            player.update(delta, inputManager.keysPressed, environmentMeshes, mapManager.maps.get(settings.currentMapId));
+        }
 
         const pos = player.controls.model.position;
         debugPos.innerHTML = `Player: x: ${pos.x.toFixed(2)}, y: ${pos.y.toFixed(2)}, z: ${pos.z.toFixed(2)}<br>Camera: x: ${camera.position.x.toFixed(2)}, y: ${camera.position.y.toFixed(2)}, z: ${camera.position.z.toFixed(2)}`;
+        
+        // Chest logic
+        let distToChest = Infinity;
+        if (!isChestOpen) {
+            chestGlowMesh.rotation.z += delta;
+            chestGlowMesh.scale.setScalar(1 + 0.1 * Math.sin(clock.elapsedTime * 5));
+            distToChest = pos.distanceTo(chestPos);
+            if (distToChest < 3.0) {
+                isNearChest = true;
+                uiManager.showInteractionPrompt('Press [E] to open chest');
+            } else {
+                isNearChest = false;
+                uiManager.hideInteractionPrompt();
+            }
+        }
+        
+        // Boss interaction logic
+        const bossTriggerPos = new THREE.Vector3(13.8, 1.48, -15.0);
+        if (theBoss && !isCutscenePlaying) {
+            // Calculate 2D distance to the static trigger zone to ignore Y differences
+            const dx = pos.x - bossTriggerPos.x;
+            const dz = pos.z - bossTriggerPos.z;
+            const distToTrigger = Math.sqrt(dx*dx + dz*dz);
+            
+            if (distToTrigger < 4.0) {
+                isNearBoss = true;
+                if (distToChest >= 3.0) { // Don't override chest prompt
+                    uiManager.showInteractionPrompt('Press [E] to talk to Boss');
+                }
+            } else {
+                if (isNearBoss) {
+                    isNearBoss = false;
+                    if (distToChest >= 3.0) uiManager.hideInteractionPrompt();
+                }
+            }
+        }
     }
 
     world.step(1 / 60, delta, 3);
@@ -664,11 +857,12 @@ function animate() {
     }
 
     const playerPos = player?.controls.model.position;
+    const aiTargetPos = isCutscenePlaying ? undefined : playerPos; // Freeze Boss AI if in cutscene
     for (const enemy of enemies) {
         if (enemy instanceof FlamingoAI) {
-            enemy.update(delta, playerPos, isNight, inSafeZone);
+            enemy.update(delta, aiTargetPos, isNight, inSafeZone);
         } else if (enemy instanceof BoxEnemyAI) {
-            enemy.update(delta, playerPos);
+            enemy.update(delta, aiTargetPos);
         }
     }
 
@@ -677,7 +871,10 @@ function animate() {
     if (player) {
         eventSystem.update(player.controls.model.position);
     }
-    orbitControls.update();
+    
+    if (!isCutscenePlaying) {
+        orbitControls.update();
+    }
 
     // Camera Collision
     const originalCameraPos = camera.position.clone();
@@ -715,11 +912,21 @@ function animate() {
         if (smoothedCameraDist === -1) smoothedCameraDist = targetDist;
         const lerpSpeed = targetDist < smoothedCameraDist ? 0.5 : 0.15;
         smoothedCameraDist += (targetDist - smoothedCameraDist) * lerpSpeed;
-        camera.position.copy(targetPos).add(dir.multiplyScalar(smoothedCameraDist));
+        
+        if (!isCutscenePlaying) {
+            camera.position.copy(targetPos).add(dir.multiplyScalar(smoothedCameraDist));
+        }
+    }
+
+    if (isCutscenePlaying) {
+        camera.position.lerp(cutsceneCameraTarget, 0.05);
+        camera.lookAt(cutscenePlayerTarget);
     }
 
     composer.render();
-    camera.position.copy(originalCameraPos);
+    if (!isCutscenePlaying) {
+        camera.position.copy(originalCameraPos);
+    }
     requestAnimationFrame(animate);
 }
 animate();

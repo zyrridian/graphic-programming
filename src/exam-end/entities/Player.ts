@@ -63,6 +63,8 @@ export class Player extends Entity {
             this.body.position.copy(mapConfig.spawnPoint as any);
             this.velocityY = 0;
             this.body.velocity.set(0, 0, 0);
+            this.controls.playEmoteReversed('Death');
+            document.dispatchEvent(new Event('playerDied'));
         }
 
         // Sync camera strictly with final physics position

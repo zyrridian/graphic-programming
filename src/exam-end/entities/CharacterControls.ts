@@ -73,6 +73,24 @@ export class CharacterControls {
         const emoteAction = this.animationsMap.get(emoteName);
         if (emoteAction) {
             emoteAction.reset();
+            emoteAction.timeScale = 1;
+            emoteAction.setLoop(THREE.LoopOnce, 1);
+            emoteAction.clampWhenFinished = true;
+            const current = this.animationsMap.get(this.currentAction);
+            if (current) current.fadeOut(this.fadeDuration);
+            emoteAction.fadeIn(this.fadeDuration).play();
+            this.currentAction = emoteName;
+        }
+    }
+
+    public playEmoteReversed(emoteName: string) {
+        if (this.isEmoting || this.isJumping) return;
+        this.isEmoting = true;
+        const emoteAction = this.animationsMap.get(emoteName);
+        if (emoteAction) {
+            emoteAction.reset();
+            emoteAction.timeScale = -1;
+            emoteAction.time = emoteAction.getClip().duration;
             emoteAction.setLoop(THREE.LoopOnce, 1);
             emoteAction.clampWhenFinished = true;
             const current = this.animationsMap.get(this.currentAction);
