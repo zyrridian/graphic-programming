@@ -2,7 +2,7 @@
 
 ## Installation
 
-- run `npm run install`
+- run `npm install`
 - `npm run dev`
 
 ## Audio & Models Credits
